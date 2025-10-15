@@ -1,0 +1,68 @@
+name: Deploy pages on release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up git user
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Prepare deployment dir
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "Release tag: $TAG"
+          if git ls-remote --exit-code origin gh-pages; then
+            git fetch origin gh-pages:gh-pages
+            git checkout gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rf .
+            mkdir -p .  || true
+            git commit --allow-empty -m "Initialize gh-pages branch"
+          fi
+
+          DEPLOY_DIR="v${TAG}"
+          echo "Deploy target dir: ${DEPLOY_DIR}"
+          mkdir -p "${DEPLOY_DIR}"
+          cp -R ../index.html "../${DEPLOY_DIR}/index.html" || true
+          cp -R index.html "${DEPLOY_DIR}/" || true
+          rm -rf "${DEPLOY_DIR}/ru" "${DEPLOY_DIR}/en" || true
+          mkdir -p "${DEPLOY_DIR}/ru" "${DEPLOY_DIR}/en"
+          cp -R ru/* "${DEPLOY_DIR}/ru/" || true
+          cp -R en/* "${DEPLOY_DIR}/en/" || true
+
+          touch .nojekyll
+
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to deploy."
+          else
+            git commit -m "Deploy site for release ${TAG}"
+            git push origin gh-pages
+          fi
+
+      - name: Show deployed URL
+        env:
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          OWNER=$(echo "${REPO}" | cut -d'/' -f1)
+          REPO_NAME=$(echo "${REPO}" | cut -d'/' -f2)
+          echo "Your site should be available at: https://${OWNER}.github.io/${REPO_NAME}/v${TAG}/"
