@@ -57,13 +57,15 @@ jobs:
             git push origin gh-pages
           fi
 
+          echo "DEPLOY_DIR=${DEPLOY_DIR}" >> $GITHUB_ENV
+
       - name: Show deployed URLs
         env:
           REPO: ${{ github.repository }}
-          TAG: ${{ github.event.release.tag_name }}
         run: |
-          CLEAN_TAG="${TAG#v}"
           OWNER=$(echo "${REPO}" | cut -d'/' -f1)
           REPO_NAME=$(echo "${REPO}" | cut -d'/' -f2)
           echo "Main page: https://${OWNER}.github.io/${REPO_NAME}/"
-          echo "New version: https://${OWNER}.github.io/${REPO_NAME}/v${CLEAN_TAG}/"
+          echo "New version: https://${OWNER}.github.io/${REPO_NAME}/${{ env.DEPLOY_DIR }}/"
+          echo "Russian version: https://${OWNER}.github.io/${REPO_NAME}/${{ env.DEPLOY_DIR }}/ru/"
+          echo "English version: https://${OWNER}.github.io/${REPO_NAME}/${{ env.DEPLOY_DIR }}/en/"
