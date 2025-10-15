@@ -1,0 +1,71 @@
+name: Deploy pages on release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up git user
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Prepare and deploy
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          CLEAN_TAG="${TAG#v}"
+          DEPLOY_DIR="v${CLEAN_TAG}"
+          
+          if git ls-remote --exit-code origin gh-pages; then
+            git fetch origin gh-pages
+            git checkout gh-pages
+            git pull origin gh-pages
+          else
+            git checkout --orphan gh-pages
+            git reset --hard
+          fi
+          
+          mkdir -p "${DEPLOY_DIR}"
+          git checkout ${{ github.sha }} -- .
+          cp -r *.html "${DEPLOY_DIR}/" 2>/dev/null || true
+          cp -r ru en "${DEPLOY_DIR}/" 2>/dev/null || true
+          git checkout gh-pages -- index.html 2>/dev/null || true
+          
+          if ! grep -q "href=\"${DEPLOY_DIR}/" index.html; then
+            sed -i "/<!-- Добавляйте новые версии сюда -->/i \    <li><a href=\"${DEPLOY_DIR}/index.html\"><code>${DEPLOY_DIR}</code></a></li>" index.html
+          fi
+          
+          touch .nojekyll
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to deploy."
+          else
+            git commit -m "Deploy version ${DEPLOY_DIR}"
+            git push origin gh-pages
+          fi
+
+          echo "DEPLOY_DIR=${DEPLOY_DIR}" >> $GITHUB_ENV
+
+      - name: Show deployed URLs
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          OWNER=$(echo "${REPO}" | cut -d'/' -f1)
+          REPO_NAME=$(echo "${REPO}" | cut -d'/' -f2)
+          echo "Main page: https://${OWNER}.github.io/${REPO_NAME}/"
+          echo "New version: https://${OWNER}.github.io/${REPO_NAME}/${{ env.DEPLOY_DIR }}/"
+          echo "Russian version: https://${OWNER}.github.io/${REPO_NAME}/${{ env.DEPLOY_DIR }}/ru/"
+          echo "English version: https://${OWNER}.github.io/${REPO_NAME}/${{ env.DEPLOY_DIR }}/en/"
