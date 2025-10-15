@@ -22,47 +22,48 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Prepare deployment dir
+      - name: Prepare and deploy
         env:
           TAG: ${{ github.event.release.tag_name }}
-          REPO: ${{ github.repository }}
         run: |
-          echo "Release tag: $TAG"
+          CLEAN_TAG="${TAG#v}"
+          DEPLOY_DIR="v${CLEAN_TAG}"
+          
           if git ls-remote --exit-code origin gh-pages; then
-            git fetch origin gh-pages:gh-pages
+            git fetch origin gh-pages
             git checkout gh-pages
+            git pull origin gh-pages
           else
             git checkout --orphan gh-pages
-            git rm -rf .
-            mkdir -p .  || true
-            git commit --allow-empty -m "Initialize gh-pages branch"
+            git reset --hard
           fi
-
-          DEPLOY_DIR="v${TAG}"
-          echo "Deploy target dir: ${DEPLOY_DIR}"
+          
           mkdir -p "${DEPLOY_DIR}"
-          cp -R ../index.html "../${DEPLOY_DIR}/index.html" || true
-          cp -R index.html "${DEPLOY_DIR}/" || true
-          rm -rf "${DEPLOY_DIR}/ru" "${DEPLOY_DIR}/en" || true
-          mkdir -p "${DEPLOY_DIR}/ru" "${DEPLOY_DIR}/en"
-          cp -R ru/* "${DEPLOY_DIR}/ru/" || true
-          cp -R en/* "${DEPLOY_DIR}/en/" || true
-
+          git checkout ${{ github.sha }} -- .
+          cp -r *.html "${DEPLOY_DIR}/" 2>/dev/null || true
+          cp -r ru en "${DEPLOY_DIR}/" 2>/dev/null || true
+          git checkout gh-pages -- index.html 2>/dev/null || true
+          
+          if ! grep -q "href=\"${DEPLOY_DIR}/" index.html; then
+            sed -i "/<!-- Добавляйте новые версии сюда -->/i \    <li><a href=\"${DEPLOY_DIR}/index.html\"><code>${DEPLOY_DIR}</code></a></li>" index.html
+          fi
+          
           touch .nojekyll
-
           git add -A
           if git diff --staged --quiet; then
             echo "No changes to deploy."
           else
-            git commit -m "Deploy site for release ${TAG}"
+            git commit -m "Deploy version ${DEPLOY_DIR}"
             git push origin gh-pages
           fi
 
-      - name: Show deployed URL
+      - name: Show deployed URLs
         env:
           REPO: ${{ github.repository }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
+          CLEAN_TAG="${TAG#v}"
           OWNER=$(echo "${REPO}" | cut -d'/' -f1)
           REPO_NAME=$(echo "${REPO}" | cut -d'/' -f2)
-          echo "Your site should be available at: https://${OWNER}.github.io/${REPO_NAME}/v${TAG}/"
+          echo "Main page: https://${OWNER}.github.io/${REPO_NAME}/"
+          echo "New version: https://${OWNER}.github.io/${REPO_NAME}/v${CLEAN_TAG}/"
